@@ -9,7 +9,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -399,15 +399,8 @@ gtls_connect_step1(struct connectdata *conn,
 #endif
   const char *prioritylist;
   const char *err = NULL;
-#ifndef CURL_DISABLE_PROXY
-  const char * const hostname = SSL_IS_PROXY() ? conn->http_proxy.host.name :
-    conn->host.name;
-  long * const certverifyresult = SSL_IS_PROXY() ?
-    &data->set.proxy_ssl.certverifyresult : &data->set.ssl.certverifyresult;
-#else
-  const char * const hostname = conn->host.name;
-  long * const certverifyresult = &data->set.ssl.certverifyresult;
-#endif
+  const char * const hostname = SSL_HOST_NAME();
+  long * const certverifyresult = &SSL_SET_OPTION_LVALUE(certverifyresult);
 
   if(connssl->state == ssl_connection_complete)
     /* to make us tolerant against being called more than once for the
@@ -839,15 +832,8 @@ gtls_connect_step3(struct connectdata *conn,
   unsigned int bits;
   gnutls_protocol_t version = gnutls_protocol_get_version(session);
 #endif
-#ifndef CURL_DISABLE_PROXY
-  const char * const hostname = SSL_IS_PROXY() ? conn->http_proxy.host.name :
-    conn->host.name;
-  long * const certverifyresult = SSL_IS_PROXY() ?
-    &data->set.proxy_ssl.certverifyresult : &data->set.ssl.certverifyresult;
-#else
-  const char * const hostname = conn->host.name;
-  long * const certverifyresult = &data->set.ssl.certverifyresult;
-#endif
+  const char * const hostname = SSL_HOST_NAME();
+  long * const certverifyresult = &SSL_SET_OPTION_LVALUE(certverifyresult);
 
   /* the name of the cipher suite used, e.g. ECDHE_RSA_AES_256_GCM_SHA384. */
   ptr = gnutls_cipher_suite_get_name(gnutls_kx_get(session),
@@ -1128,22 +1114,15 @@ gtls_connect_step3(struct connectdata *conn,
   }
 #endif
   if(!rc) {
-#ifndef CURL_DISABLE_PROXY
-    const char * const dispname = SSL_IS_PROXY() ?
-      conn->http_proxy.host.dispname : conn->host.dispname;
-#else
-    const char * const dispname = conn->host.dispname;
-#endif
-
     if(SSL_CONN_CONFIG(verifyhost)) {
       failf(data, "SSL: certificate subject name (%s) does not match "
-            "target host name '%s'", certname, dispname);
+            "target host name '%s'", certname, SSL_HOST_DISPNAME());
       gnutls_x509_crt_deinit(x509_cert);
       return CURLE_PEER_FAILED_VERIFICATION;
     }
     else
       infof(data, "\t common name: %s (does not match '%s')\n",
-            certname, dispname);
+            certname, SSL_HOST_DISPNAME());
   }
   else
     infof(data, "\t common name: %s (matched)\n", certname);
@@ -1246,13 +1225,18 @@ gtls_connect_step3(struct connectdata *conn,
 
     certclock = gnutls_x509_crt_get_expiration_time(x509_cert);
     showtime(data, "expire date", certclock);
+
+    gnutls_free(certfields.data);
   }
 
   rc = gnutls_x509_crt_get_issuer_dn2(x509_cert, &certfields);
   if(rc)
     infof(data, "Failed to get certificate issuer\n");
-  else
+  else {
     infof(data, "\t issuer: %s\n", certfields.data);
+
+    gnutls_free(certfields.data);
+  }
 #endif
 
   gnutls_x509_crt_deinit(x509_cert);

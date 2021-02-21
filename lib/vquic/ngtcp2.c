@@ -9,7 +9,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -798,7 +798,7 @@ CURLcode Curl_quic_connect(struct connectdata *conn,
   infof(data, "Connect socket %d over QUIC to %s:%ld\n",
         sockfd, ipbuf, port);
 
-  qs->version = NGTCP2_PROTO_VER;
+  qs->version = NGTCP2_PROTO_VER_MAX;
 #ifdef USE_OPENSSL
   qs->sslctx = quic_ssl_ctx(data);
   if(!qs->sslctx)
@@ -831,13 +831,9 @@ CURLcode Curl_quic_connect(struct connectdata *conn,
   ngtcp2_addr_init(&path.local, &qs->local_addr, qs->local_addrlen, NULL);
   ngtcp2_addr_init(&path.remote, addr, addrlen, NULL);
 
-#ifdef NGTCP2_PROTO_VER
-#define QUICVER NGTCP2_PROTO_VER
-#else
-#error "unsupported ngtcp2 version"
-#endif
-  rc = ngtcp2_conn_client_new(&qs->qconn, &qs->dcid, &qs->scid, &path, QUICVER,
-                              &ng_callbacks, &qs->settings, NULL, qs);
+  rc = ngtcp2_conn_client_new(&qs->qconn, &qs->dcid, &qs->scid, &path,
+                              NGTCP2_PROTO_VER_MAX, &ng_callbacks,
+                              &qs->settings, NULL, qs);
   if(rc)
     return CURLE_QUIC_CONNECT_ERROR;
 
@@ -1167,6 +1163,7 @@ static nghttp3_conn_callbacks ngh3_callbacks = {
   cb_h3_send_stop_sending,
   NULL, /* push_stream */
   NULL, /* end_stream */
+  NULL, /* reset_stream */
 };
 
 static int init_ngh3_conn(struct quicsocket *qs)
@@ -1719,7 +1716,8 @@ CURLcode Curl_quic_is_connected(struct connectdata *conn,
 
 }
 
-static CURLcode ng_process_ingress(struct connectdata *conn, int sockfd,
+static CURLcode ng_process_ingress(struct connectdata *conn,
+                                   curl_socket_t sockfd,
                                    struct quicsocket *qs)
 {
   ssize_t recvd;
@@ -1734,7 +1732,7 @@ static CURLcode ng_process_ingress(struct connectdata *conn, int sockfd,
 
   for(;;) {
     remote_addrlen = sizeof(remote_addr);
-    while((recvd = recvfrom(sockfd, buf, bufsize, 0,
+    while((recvd = recvfrom(sockfd, (char *)buf, bufsize, 0,
                             (struct sockaddr *)&remote_addr,
                             &remote_addrlen)) == -1 &&
           SOCKERRNO == EINTR)
@@ -1874,7 +1872,7 @@ static CURLcode ng_flush_egress(struct connectdata *conn, int sockfd,
     }
 
     memcpy(&remote_addr, ps.path.remote.addr, ps.path.remote.addrlen);
-    while((sent = send(sockfd, out, outlen, 0)) == -1 &&
+    while((sent = send(sockfd, (const char *)out, outlen, 0)) == -1 &&
           SOCKERRNO == EINTR)
       ;
 

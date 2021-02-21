@@ -9,7 +9,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -3158,7 +3158,6 @@ CURLMcode curl_multi_socket_action(struct Curl_multi *multi, curl_socket_t s,
 }
 
 CURLMcode curl_multi_socket_all(struct Curl_multi *multi, int *running_handles)
-
 {
   CURLMcode result;
   if(multi->in_callback)

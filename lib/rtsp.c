@@ -9,7 +9,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -776,6 +776,8 @@ CURLcode Curl_rtsp_parseheader(struct connectdata *conn,
   }
   else if(checkprefix("Session:", header)) {
     char *start;
+    char *end;
+    size_t idlen;
 
     /* Find the first non-space letter */
     start = header + 8;
@@ -784,11 +786,25 @@ CURLcode Curl_rtsp_parseheader(struct connectdata *conn,
 
     if(!*start) {
       failf(data, "Got a blank Session ID");
+      return CURLE_RTSP_SESSION_ERROR;
     }
-    else if(data->set.str[STRING_RTSP_SESSION_ID]) {
+
+    /* Find the end of Session ID
+     *
+     * Allow any non whitespace content, up to the field separator or end of
+     * line. RFC 2326 isn't 100% clear on the session ID and for example
+     * gstreamer does url-encoded session ID's not covered by the standard.
+     */
+    end = start;
+    while(*end && *end != ';' && !ISSPACE(*end))
+      end++;
+    idlen = end - start;
+
+    if(data->set.str[STRING_RTSP_SESSION_ID]) {
+
       /* If the Session ID is set, then compare */
-      if(strncmp(start, data->set.str[STRING_RTSP_SESSION_ID],
-                 strlen(data->set.str[STRING_RTSP_SESSION_ID]))  != 0) {
+      if(strlen(data->set.str[STRING_RTSP_SESSION_ID]) != idlen ||
+         strncmp(start, data->set.str[STRING_RTSP_SESSION_ID], idlen) != 0) {
         failf(data, "Got RTSP Session ID Line [%s], but wanted ID [%s]",
               start, data->set.str[STRING_RTSP_SESSION_ID]);
         return CURLE_RTSP_SESSION_ERROR;
@@ -797,21 +813,14 @@ CURLcode Curl_rtsp_parseheader(struct connectdata *conn,
     else {
       /* If the Session ID is not set, and we find it in a response, then set
        * it.
-       *
-       * Allow any non whitespace content, up to the field separator or end of
-       * line. RFC 2326 isn't 100% clear on the session ID and for example
-       * gstreamer does url-encoded session ID's not covered by the standard.
        */
-      char *end = start;
-      while(*end && *end != ';' && !ISSPACE(*end))
-        end++;
 
       /* Copy the id substring into a new buffer */
-      data->set.str[STRING_RTSP_SESSION_ID] = malloc(end - start + 1);
+      data->set.str[STRING_RTSP_SESSION_ID] = malloc(idlen + 1);
       if(data->set.str[STRING_RTSP_SESSION_ID] == NULL)
         return CURLE_OUT_OF_MEMORY;
-      memcpy(data->set.str[STRING_RTSP_SESSION_ID], start, end - start);
-      (data->set.str[STRING_RTSP_SESSION_ID])[end - start] = '\0';
+      memcpy(data->set.str[STRING_RTSP_SESSION_ID], start, idlen);
+      (data->set.str[STRING_RTSP_SESSION_ID])[idlen] = '\0';
     }
   }
   return CURLE_OK;

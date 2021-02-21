@@ -9,7 +9,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -1496,8 +1496,7 @@ static ssize_t http2_handle_stream_close(struct connectdata *conn,
         break;
       len = lf + 1 - trailp;
 
-      if(data->set.verbose)
-        Curl_debug(data, CURLINFO_HEADER_IN, trailp, len);
+      Curl_debug(data, CURLINFO_HEADER_IN, trailp, len);
       /* pass the trailers one by one to the callback */
       result = Curl_client_write(conn, CLIENTWRITE_HEADER, trailp, len);
       if(result) {

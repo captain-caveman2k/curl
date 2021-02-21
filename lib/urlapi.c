@@ -9,7 +9,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -1387,28 +1387,17 @@ CURLUcode curl_url_set(CURLU *u, CURLUPart what,
     if(urlencode) {
       const unsigned char *i;
       char *o;
-      bool free_part = FALSE;
       char *enc = malloc(nalloc * 3 + 1); /* for worst case! */
       if(!enc)
         return CURLUE_OUT_OF_MEMORY;
-      if(plusencode) {
-        /* space to plus */
-        i = (const unsigned char *)part;
-        for(o = enc; *i; ++o, ++i)
-          *o = (*i == ' ') ? '+' : *i;
-        *o = 0; /* null-terminate */
-        part = strdup(enc);
-        if(!part) {
-          free(enc);
-          return CURLUE_OUT_OF_MEMORY;
-        }
-        free_part = TRUE;
-      }
       for(i = (const unsigned char *)part, o = enc; *i; i++) {
-        if(Curl_isunreserved(*i) ||
-           ((*i == '/') && urlskipslash) ||
-           ((*i == '=') && equalsencode) ||
-           ((*i == '+') && plusencode)) {
+        if((*i == ' ') && plusencode) {
+          *o = '+';
+          o++;
+        }
+        else if(Curl_isunreserved(*i) ||
+                ((*i == '/') && urlskipslash) ||
+                ((*i == '=') && equalsencode)) {
           if((*i == '=') && equalsencode)
             /* only skip the first equals sign */
             equalsencode = FALSE;
@@ -1422,8 +1411,6 @@ CURLUcode curl_url_set(CURLU *u, CURLUPart what,
       }
       *o = 0; /* null-terminate */
       newp = enc;
-      if(free_part)
-        free((char *)part);
     }
     else {
       char *p;

@@ -10,7 +10,7 @@
 #
 # This software is licensed as described in the file COPYING, which
 # you should have received as part of this distribution. The terms
-# are also available at https://curl.haxx.se/docs/copyright.html.
+# are also available at https://curl.se/docs/copyright.html.
 #
 # You may opt to use, copy, modify, merge, publish, distribute and/or sell
 # copies of the Software, and permit persons to whom the Software is
@@ -52,7 +52,7 @@ my %warnings_extended = (
 my %warnings = (
     'LONGLINE'         => "Line longer than $max_column",
     'TABS'             => 'TAB characters not allowed',
-    'TRAILINGSPACE'    => 'Trailing white space on the line',
+    'TRAILINGSPACE'    => 'Trailing whitespace on the line',
     'CPPCOMMENTS'      => '// comment detected',
     'SPACEBEFOREPAREN' => 'space before an open parenthesis',
     'SPACEAFTERPAREN'  => 'space after open parenthesis',
@@ -84,6 +84,8 @@ my %warnings = (
     'TYPEDEFSTRUCT'    => 'typedefed struct',
     'DOBRACE'          => 'A single space between do and open brace',
     'BRACEWHILE'       => 'A single space between open brace and while',
+    'EXCLAMATIONSPACE' => 'Whitespace after exclamation mark in expression',
+    'EMPTYLINEBRACE'   => 'Empty line before the open brace',
     );
 
 sub readskiplist {
@@ -399,7 +401,7 @@ sub scanfile {
             checkwarn("TABS",
                       $line, length($1), $file, $l, "Contains TAB character", 1);
         }
-        # detect trailing white space
+        # detect trailing whitespace
         if($l =~ /^(.*)[ \t]+\z/) {
             checkwarn("TRAILINGSPACE",
                       $line, length($1), $file, $l, "Trailing whitespace");
@@ -441,7 +443,7 @@ sub scanfile {
 
         # crude attempt to detect // comments without too many false
         # positives
-        if($l =~ /^([^"\*]*)[^:"]\/\//) {
+        if($l =~ /^(([^"\*]*)[^:"]|)\/\//) {
             checkwarn("CPPCOMMENTS",
                       $line, length($1), $file, $l, "\/\/ comment");
         }
@@ -593,6 +595,11 @@ sub scanfile {
             checkwarn("PARENBRACE",
                       $line, length($1)+1, $file, $l, "missing space after close paren");
         }
+        # check for "^{" with an empty line before it
+        if(($l =~ /^\{/) && ($prevl =~ /^[ \t]*\z/)) {
+            checkwarn("EMPTYLINEBRACE",
+                      $line, 0, $file, $l, "empty line before open brace");
+        }
 
         # check for space before the semicolon last in a line
         if($l =~ /^(.*[^ ].*) ;$/) {
@@ -723,6 +730,12 @@ sub scanfile {
             checkwarn("TYPEDEFSTRUCT",
                       $line, length($1)+1, $file, $ol,
                       "typedef'ed struct");
+        }
+
+        if($nostr =~ /(.*)! +(\w|\()/) {
+            checkwarn("EXCLAMATIONSPACE",
+                      $line, length($1)+1, $file, $ol,
+                      "space after exclamation mark");
         }
 
         # check for more than one consecutive space before open brace or

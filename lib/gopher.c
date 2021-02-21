@@ -9,7 +9,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -171,9 +171,7 @@ static CURLcode gopher_do(struct connectdata *conn, bool *done)
   free(sel_org);
 
   if(!result)
-    /* We can use Curl_sendf to send the terminal \r\n relatively safely and
-       save allocing another string/doing another _write loop. */
-    result = Curl_sendf(sockfd, conn, "\r\n");
+    result = Curl_write(conn, sockfd, "\r\n", 2, &amount);
   if(result) {
     failf(data, "Failed sending Gopher request");
     return result;

@@ -9,7 +9,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -219,6 +219,7 @@ static const struct LongShort aliases[]= {
   {"A",  "user-agent",               ARG_STRING},
   {"b",  "cookie",                   ARG_STRING},
   {"ba", "alt-svc",                  ARG_STRING},
+  {"bb", "hsts",                     ARG_STRING},
   {"B",  "use-ascii",                ARG_BOOL},
   {"c",  "cookie-jar",               ARG_STRING},
   {"C",  "continue-at",              ARG_STRING},
@@ -1269,11 +1270,11 @@ ParameterError getparameter(const char *flag, /* f or -long-flag */
       break;
     case '4':
       /* IPv4 */
-      config->ip_version = 4;
+      config->ip_version = CURL_IPRESOLVE_V4;
       break;
     case '6':
       /* IPv6 */
-      config->ip_version = 6;
+      config->ip_version = CURL_IPRESOLVE_V6;
       break;
     case 'a':
       /* This makes the FTP sessions use APPE instead of STOR */
@@ -1288,6 +1289,12 @@ ParameterError getparameter(const char *flag, /* f or -long-flag */
       case 'a': /* --alt-svc */
         if(curlinfo->features & CURL_VERSION_ALTSVC)
           GetStr(&config->altsvc, nextarg);
+        else
+          return PARAM_LIBCURL_DOESNT_SUPPORT;
+        break;
+      case 'b': /* --hsts */
+        if(curlinfo->features & CURL_VERSION_HSTS)
+          GetStr(&config->hsts, nextarg);
         else
           return PARAM_LIBCURL_DOESNT_SUPPORT;
         break;

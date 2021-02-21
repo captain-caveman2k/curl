@@ -9,7 +9,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -77,6 +77,7 @@
 #include "connect.h"
 #include "strdup.h"
 #include "altsvc.h"
+#include "hsts.h"
 
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
@@ -1254,16 +1255,12 @@ CURLcode Curl_buffer_send(struct dynbuf *in,
     size_t headlen = (size_t)amount>headersize ? headersize : (size_t)amount;
     size_t bodylen = amount - headlen;
 
-    if(data->set.verbose) {
-      /* this data _may_ contain binary stuff */
-      Curl_debug(data, CURLINFO_HEADER_OUT, ptr, headlen);
-      if(bodylen) {
-        /* there was body data sent beyond the initial header part, pass that
-           on to the debug callback too */
-        Curl_debug(data, CURLINFO_DATA_OUT,
-                   ptr + headlen, bodylen);
-      }
-    }
+    /* this data _may_ contain binary stuff */
+    Curl_debug(data, CURLINFO_HEADER_OUT, ptr, headlen);
+    if(bodylen)
+      /* there was body data sent beyond the initial header part, pass that on
+         to the debug callback too */
+      Curl_debug(data, CURLINFO_DATA_OUT, ptr + headlen, bodylen);
 
     /* 'amount' can never be a very large value here so typecasting it so a
        signed 31 bit value should not cause problems even if ssize_t is
@@ -1355,7 +1352,7 @@ Curl_compareheader(const char *headerline, /* line to check */
   /* pass the header */
   start = &headerline[hlen];
 
-  /* pass all white spaces */
+  /* pass all whitespace */
   while(*start && ISSPACE(*start))
     start++;
 
@@ -2518,7 +2515,7 @@ CURLcode Curl_http(struct connectdata *conn, bool *done)
   if(result)
     return result;
 
-#ifdef USE_ALTSVC
+#ifndef CURL_DISABLE_ALTSVC
   if(conn->bits.altused && !Curl_checkheaders(conn, "Alt-Used")) {
     altused = aprintf("Alt-Used: %s:%d\r\n",
                       conn->conn_to_host.name, conn->conn_to_port);
@@ -2873,20 +2870,24 @@ CURLcode Curl_http(struct connectdata *conn, bool *done)
         }
         else {
           if(postsize) {
+            char chunk[16];
             /* Append the POST data chunky-style */
-            result = Curl_dyn_addf(&req, "%x\r\n", (int)postsize);
+            msnprintf(chunk, sizeof(chunk), "%x\r\n", (int)postsize);
+            result = Curl_dyn_add(&req, chunk);
             if(!result) {
+              included_body = postsize + strlen(chunk);
               result = Curl_dyn_addn(&req, data->set.postfields,
                                      (size_t)postsize);
               if(!result)
                 result = Curl_dyn_add(&req, "\r\n");
-              included_body = postsize + 2;
+              included_body += 2;
             }
           }
-          if(!result)
+          if(!result) {
             result = Curl_dyn_add(&req, "\x30\x0d\x0a\x0d\x0a");
-          /* 0  CR  LF  CR  LF */
-          included_body += 5;
+            /* 0  CR  LF  CR  LF */
+            included_body += 5;
+          }
         }
         if(result)
           return result;
@@ -3533,10 +3534,8 @@ CURLcode Curl_http_readwrite_headers(struct Curl_easy *data,
           k->keepon &= ~KEEP_RECV;
         }
 
-        if(data->set.verbose)
-          Curl_debug(data, CURLINFO_HEADER_IN,
-                     str_start, headerlen);
-        break;          /* exit header line loop */
+        Curl_debug(data, CURLINFO_HEADER_IN, str_start, headerlen);
+        break; /* exit header line loop */
       }
 
       /* We continue reading headers, reset the line-based header */
@@ -3992,7 +3991,24 @@ CURLcode Curl_http_readwrite_headers(struct Curl_easy *data,
         }
       }
     }
-#ifdef USE_ALTSVC
+
+#ifdef USE_HSTS
+    /* If enabled, the header is incoming and this is over HTTPS */
+    else if(data->hsts && checkprefix("Strict-Transport-Security:", headp) &&
+            (conn->handler->flags & PROTOPT_SSL)) {
+      CURLcode check =
+        Curl_hsts_parse(data->hsts, data->state.up.hostname,
+                        &headp[ sizeof("Strict-Transport-Security:") -1 ]);
+      if(check)
+        infof(data, "Illegal STS header skipped\n");
+#ifdef DEBUGBUILD
+      else
+        infof(data, "Parsed STS header fine (%d entries)\n",
+              data->hsts->list.size);
+#endif
+    }
+#endif
+#ifndef CURL_DISABLE_ALTSVC
     /* If enabled, the header is incoming and this is over HTTPS */
     else if(data->asi && checkprefix("Alt-Svc:", headp) &&
             ((conn->handler->flags & PROTOPT_SSL) ||
@@ -4027,9 +4043,8 @@ CURLcode Curl_http_readwrite_headers(struct Curl_easy *data,
     if(data->set.include_header)
       writetype |= CLIENTWRITE_BODY;
 
-    if(data->set.verbose)
-      Curl_debug(data, CURLINFO_HEADER_IN, headp,
-                 Curl_dyn_len(&data->state.headerb));
+    Curl_debug(data, CURLINFO_HEADER_IN, headp,
+               Curl_dyn_len(&data->state.headerb));
 
     result = Curl_client_write(conn, writetype, headp,
                                Curl_dyn_len(&data->state.headerb));

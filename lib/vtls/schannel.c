@@ -11,7 +11,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -1179,6 +1179,10 @@ schannel_connect_step2(struct connectdata *conn, int sockindex)
         return CURLE_OUT_OF_MEMORY;
       case SEC_E_WRONG_PRINCIPAL:
         failf(data, "schannel: SNI or certificate check failed: %s",
+              Curl_sspi_strerror(sspi_status, buffer, sizeof(buffer)));
+        return CURLE_PEER_FAILED_VERIFICATION;
+      case SEC_E_UNTRUSTED_ROOT:
+        failf(data, "schannel: %s",
               Curl_sspi_strerror(sspi_status, buffer, sizeof(buffer)));
         return CURLE_PEER_FAILED_VERIFICATION;
         /*

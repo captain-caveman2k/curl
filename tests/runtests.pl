@@ -10,7 +10,7 @@
 #
 # This software is licensed as described in the file COPYING, which
 # you should have received as part of this distribution. The terms
-# are also available at https://curl.haxx.se/docs/copyright.html.
+# are also available at https://curl.se/docs/copyright.html.
 #
 # You may opt to use, copy, modify, merge, publish, distribute and/or sell
 # copies of the Software, and permit persons to whom the Software is
@@ -163,6 +163,7 @@ my $TELNETPORT=$noport;  # TELNET server port with negotiation
 my $HTTPUNIXPATH;        # HTTP server Unix domain socket path
 
 my $SSHSRVMD5 = "[uninitialized]"; # MD5 of ssh server public key
+my $VERSION;             # curl's reported version number
 
 my $srcdir = $ENV{'srcdir'} || '.';
 my $CURL="../src/curl".exe_ext('TOOL'); # what curl executable to run on the tests
@@ -255,6 +256,7 @@ my $has_cares;      # set if built with c-ares
 my $has_threadedres;# set if built with threaded resolver
 my $has_psl;        # set if libcurl is built with PSL support
 my $has_altsvc;     # set if libcurl is built with alt-svc support
+my $has_hsts;       # set if libcurl is built with HSTS support
 my $has_ldpreload;  # set if curl is built for systems supporting LD_PRELOAD
 my $has_multissl;   # set if curl is build with MultiSSL support
 my $has_manual;     # set if curl is built with built-in manual
@@ -551,7 +553,7 @@ sub checkcmd {
     my ($cmd)=@_;
     my @paths=(split(":", $ENV{'PATH'}), "/usr/sbin", "/usr/local/sbin",
                "/sbin", "/usr/bin", "/usr/local/bin",
-               "./libtest/.libs", "./libtest");
+               "$LIBDIR/.libs", "$LIBDIR");
     for(@paths) {
         if( -x "$_/$cmd" && ! -d "$_/$cmd") {
             # executable bit but not a directory!
@@ -2761,6 +2763,7 @@ sub compare {
 
 sub setupfeatures {
     $feature{"alt-svc"} = $has_altsvc;
+    $feature{"HSTS"} = $has_hsts;
     $feature{"brotli"} = $has_brotli;
     $feature{"crypto"} = $has_crypto;
     $feature{"debug"} = $debug_build;
@@ -2863,8 +2866,9 @@ sub checksystem {
     for(@version) {
         chomp;
 
-        if($_ =~ /^curl/) {
+        if($_ =~ /^curl ([^ ]*)/) {
             $curl = $_;
+            $VERSION = $1;
             $curl =~ s/^(.*)(libcurl.*)/$1/g;
 
             $libcurl = $2;
@@ -3032,6 +3036,9 @@ sub checksystem {
             if($feat =~ /alt-svc/i) {
                 # alt-svc enabled
                 $has_altsvc=1;
+            }
+            if($feat =~ /HSTS/i) {
+                $has_hsts=1;
             }
             if($feat =~ /AsynchDNS/i) {
                 if(!$has_cares) {
@@ -3261,6 +3268,7 @@ sub subVariables {
     $$thing =~ s/${prefix}CURL/$CURL/g;
     $$thing =~ s/${prefix}PWD/$pwd/g;
     $$thing =~ s/${prefix}POSIX_PWD/$posix_pwd/g;
+    $$thing =~ s/${prefix}VERSION/$VERSION/g;
 
     my $file_pwd = $pwd;
     if($file_pwd !~ /^\//) {
@@ -3303,6 +3311,20 @@ sub subBase64 {
         my $enc = encode_base64($d, "");
         # put the result into there
         $$thing =~ s/%%B64%%/$enc/;
+    }
+    # hex decode
+    if($$thing =~ s/%hex\[(.*)\]hex%/%%HEX%%/i) {
+        # decode %NN characters
+        my $d = $1;
+        $d =~ s/%([0-9A-Fa-f]{2})/chr(hex($1))/eg;
+        $$thing =~ s/%%HEX%%/$d/;
+    }
+    if($$thing =~ s/%repeat\[(\d+) x (.*)\]%/%%REPEAT%%/i) {
+        # decode %NN characters
+        my ($d, $n) = ($2, $1);
+        $d =~ s/%([0-9A-Fa-f]{2})/chr(hex($1))/eg;
+        my $all = $d x $n;
+        $$thing =~ s/%%REPEAT%%/$all/;
     }
 }
 
@@ -3503,10 +3525,10 @@ sub singletest {
 
     # create test result in CI services
     if(azure_check_environment() && $AZURE_RUN_ID) {
-        $AZURE_RESULT_ID = azure_create_test_result($AZURE_RUN_ID, $testnum, $testname);
+        $AZURE_RESULT_ID = azure_create_test_result($VCURL, $AZURE_RUN_ID, $testnum, $testname);
     }
     elsif(appveyor_check_environment()) {
-        appveyor_create_test_result($testnum, $testname);
+        appveyor_create_test_result($VCURL, $testnum, $testname);
     }
 
     # remove test server commands file before servers are started/verified
@@ -3932,11 +3954,11 @@ sub singletest {
     if ($torture) {
         $cmdres = torture($CMDLINE,
                           $testnum,
-                          "$gdb --directory libtest $DBGCURL -x $LOGDIR/gdbcmd");
+                          "$gdb --directory $LIBDIR $DBGCURL -x $LOGDIR/gdbcmd");
     }
     elsif($gdbthis) {
         my $GDBW = ($gdbxwin) ? "-w" : "";
-        runclient("$gdb --directory libtest $DBGCURL $GDBW -x $LOGDIR/gdbcmd");
+        runclient("$gdb --directory $LIBDIR $DBGCURL $GDBW -x $LOGDIR/gdbcmd");
         $cmdres=0; # makes it always continue after a debugged run
     }
     else {
@@ -5163,9 +5185,9 @@ disabledtests("$TESTDIR/DISABLED.local");
 # Check options to this test program
 #
 
-# Special case for CMake: replace '${TFLAGS}' by the contents of the
+# Special case for CMake: replace '$TFLAGS' by the contents of the
 # environment variable (if any).
-if(@ARGV && $ARGV[-1] eq '${TFLAGS}') {
+if(@ARGV && $ARGV[-1] eq '$TFLAGS') {
     pop @ARGV;
     push(@ARGV, split(' ', $ENV{'TFLAGS'})) if defined($ENV{'TFLAGS'});
 }
@@ -5666,7 +5688,7 @@ sub displaylogs {
 #
 
 if(azure_check_environment()) {
-    $AZURE_RUN_ID = azure_create_test_run();
+    $AZURE_RUN_ID = azure_create_test_run($VCURL);
     logmsg "Azure Run ID: $AZURE_RUN_ID\n" if ($verbose);
 }
 
@@ -5694,11 +5716,11 @@ foreach $testnum (@at) {
 
     # update test result in CI services
     if(azure_check_environment() && $AZURE_RUN_ID && $AZURE_RESULT_ID) {
-        $AZURE_RESULT_ID = azure_update_test_result($AZURE_RUN_ID, $AZURE_RESULT_ID, $testnum, $error,
+        $AZURE_RESULT_ID = azure_update_test_result($VCURL, $AZURE_RUN_ID, $AZURE_RESULT_ID, $testnum, $error,
                                                     $timeprepini{$testnum}, $timevrfyend{$testnum});
     }
     elsif(appveyor_check_environment()) {
-        appveyor_update_test_result($testnum, $error, $timeprepini{$testnum}, $timevrfyend{$testnum});
+        appveyor_update_test_result($VCURL, $testnum, $error, $timeprepini{$testnum}, $timevrfyend{$testnum});
     }
 
     if($error < 0) {
@@ -5743,7 +5765,7 @@ my $sofar = time() - $start;
 #
 
 if(azure_check_environment() && $AZURE_RUN_ID) {
-    $AZURE_RUN_ID = azure_update_test_run($AZURE_RUN_ID);
+    $AZURE_RUN_ID = azure_update_test_run($VCURL, $AZURE_RUN_ID);
 }
 
 # Tests done, stop the servers
@@ -5758,11 +5780,18 @@ if($total) {
                    $ok/$total*100);
 
     if($ok != $total) {
-        logmsg "TESTFAIL: These test cases failed: $failed\n";
+        logmsg "\nTESTFAIL: These test cases failed: $failed\n\n";
     }
 }
 else {
-    logmsg "TESTFAIL: No tests were performed\n";
+    logmsg "\nTESTFAIL: No tests were performed\n\n";
+    if(scalar(keys %enabled_keywords)) {
+        logmsg "TESTFAIL: Nothing matched these keywords: ";
+        for(keys %enabled_keywords) {
+            logmsg "$_ ";
+        }
+        logmsg "\n";
+    }
 }
 
 if($all) {
@@ -5799,6 +5828,6 @@ if($skipped && !$short) {
     }
 }
 
-if($total && (($ok+$ign) != $total)) {
+if(($total && (($ok+$ign) != $total)) || !$total) {
     exit 1;
 }

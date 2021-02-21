@@ -9,7 +9,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -177,15 +177,22 @@ CURLcode Curl_dyn_add(struct dynbuf *s, const char *str)
 }
 
 /*
- * Append a string printf()-style
+ * Append a string vprintf()-style
  */
-CURLcode Curl_dyn_addf(struct dynbuf *s, const char *fmt, ...)
+CURLcode Curl_dyn_vaddf(struct dynbuf *s, const char *fmt, va_list ap)
 {
+#ifdef BUILDING_LIBCURL
+  int rc;
+  DEBUGASSERT(s);
+  DEBUGASSERT(s->init == DYNINIT);
+  DEBUGASSERT(!s->leng || s->bufr);
+  rc = Curl_dyn_vprintf(s, fmt, ap);
+
+  if(!rc)
+    return CURLE_OK;
+#else
   char *str;
-  va_list ap;
-  va_start(ap, fmt);
   str = vaprintf(fmt, ap); /* this allocs a new string to append */
-  va_end(ap);
 
   if(str) {
     CURLcode result = dyn_nappend(s, (unsigned char *)str, strlen(str));
@@ -194,7 +201,24 @@ CURLcode Curl_dyn_addf(struct dynbuf *s, const char *fmt, ...)
   }
   /* If we failed, we cleanup the whole buffer and return error */
   Curl_dyn_free(s);
+#endif
   return CURLE_OUT_OF_MEMORY;
+}
+
+/*
+ * Append a string printf()-style
+ */
+CURLcode Curl_dyn_addf(struct dynbuf *s, const char *fmt, ...)
+{
+  CURLcode result;
+  va_list ap;
+  DEBUGASSERT(s);
+  DEBUGASSERT(s->init == DYNINIT);
+  DEBUGASSERT(!s->leng || s->bufr);
+  va_start(ap, fmt);
+  result = Curl_dyn_vaddf(s, fmt, ap);
+  va_end(ap);
+  return result;
 }
 
 /*

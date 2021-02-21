@@ -9,7 +9,7 @@
 #
 # This software is licensed as described in the file COPYING, which
 # you should have received as part of this distribution. The terms
-# are also available at https://curl.haxx.se/docs/copyright.html.
+# are also available at https://curl.se/docs/copyright.html.
 #
 # You may opt to use, copy, modify, merge, publish, distribute and/or sell
 # copies of the Software, and permit persons to whom the Software is
@@ -63,7 +63,7 @@ message(STATUS "curl version=[${CURL_VERSION}]")
 # SET(PACKAGE_NAME "curl")
 # SET(PACKAGE_VERSION "-")
 # SET(PACKAGE_STRING "curl-")
-# SET(PACKAGE_BUGREPORT "a suitable curl mailing list => https://curl.haxx.se/mail/")
+# SET(PACKAGE_BUGREPORT "a suitable curl mailing list => https://curl.se/mail/")
 set(OPERATING_SYSTEM "${CMAKE_SYSTEM_NAME}")
 set(OS "\"${CMAKE_SYSTEM_NAME}\"")
 
@@ -208,9 +208,10 @@ if(HTTP_ONLY)
   set(CURL_DISABLE_TFTP ON)
 endif()
 
+option(CURL_DISABLE_ALTSVC "to disable alt-svc support" OFF)
+mark_as_advanced(CURL_DISABLE_ALTSVC)
 option(CURL_DISABLE_COOKIES "to disable cookies support" OFF)
 mark_as_advanced(CURL_DISABLE_COOKIES)
-
 option(CURL_DISABLE_CRYPTO_AUTH "to disable cryptographic authentication" OFF)
 mark_as_advanced(CURL_DISABLE_CRYPTO_AUTH)
 option(CURL_DISABLE_VERBOSE_STRINGS "to disable verbose strings" OFF)
@@ -775,6 +776,7 @@ if(CMAKE_USE_GSSAPI)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${GSS_COMPILER_FLAGS}")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${GSS_LINKER_FLAGS}")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${GSS_LINKER_FLAGS}")
+    set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} ${GSS_LINKER_FLAGS}")
     list(APPEND CURL_LIBS ${GSS_LIBRARIES})
 
   else()
@@ -790,8 +792,6 @@ else()
   unset(USE_UNIX_SOCKETS CACHE)
 endif()
 
-option(ENABLE_ALT_SVC "Enable alt-svc support" OFF)
-set(USE_ALTSVC ${ENABLE_ALT_SVC})
 
 #
 # CA handling
@@ -1325,10 +1325,10 @@ if(BUILD_CURL_EXE)
   add_subdirectory(src)
 endif()
 
-option(BUILD_TESTING "Build tests" "${PERL_FOUND}")
-if(NOT PERL_FOUND)
-  message(STATUS "Perl not found, testing disabled.")
-elseif(BUILD_TESTING)
+cmake_dependent_option(BUILD_TESTING "Build tests"
+  ON "PERL_FOUND;NOT CURL_DISABLE_TESTS"
+  OFF)
+if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()
 
@@ -1353,7 +1353,7 @@ endmacro()
 set(_items)
 _add_if("SSL"           SSL_ENABLED)
 _add_if("IPv6"          ENABLE_IPV6)
-_add_if("unix-sockets"  USE_UNIX_SOCKETS)
+_add_if("unixsockets"   USE_UNIX_SOCKETS)
 _add_if("libz"          HAVE_LIBZ)
 _add_if("brotli"        HAVE_BROTLI)
 _add_if("zstd"          HAVE_ZSTD)
@@ -1364,7 +1364,7 @@ _add_if("Largefile"     (CURL_SIZEOF_CURL_OFF_T GREATER 4) AND
 # TODO SSP1 (Schannel) check is missing
 _add_if("SSPI"          USE_WINDOWS_SSPI)
 _add_if("GSS-API"       HAVE_GSSAPI)
-_add_if("alt-svc"       ENABLE_ALT_SVC)
+_add_if("alt-svc"       NOT CURL_DISABLE_ALTSVC)
 # TODO SSP1 missing for SPNEGO
 _add_if("SPNEGO"        NOT CURL_DISABLE_CRYPTO_AUTH AND
                         (HAVE_GSSAPI OR USE_WINDOWS_SSPI))
@@ -1382,6 +1382,7 @@ _add_if("HTTP2"         USE_NGHTTP2)
 _add_if("HTTP3"         USE_NGTCP2 OR USE_QUICHE)
 _add_if("MultiSSL"      CURL_WITH_MULTI_SSL)
 _add_if("HTTPS-proxy"   SSL_ENABLED AND (USE_OPENSSL OR USE_GNUTLS OR USE_NSS))
+_add_if("unicode"       ENABLE_UNICODE)
 string(REPLACE ";" " " SUPPORT_FEATURES "${_items}")
 message(STATUS "Enabled features: ${SUPPORT_FEATURES}")
 
